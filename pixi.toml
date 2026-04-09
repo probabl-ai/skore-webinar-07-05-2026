@@ -1,0 +1,17 @@
+[workspace]
+authors = ["Guillaume Lemaitre <guillaume@probabl.ai>"]
+channels = ["conda-forge"]
+name = "2026-03-31-demo-cfm"
+platforms = ["osx-arm64"]
+version = "0.1.0"
+
+[dependencies]
+python = "<3.14"
+jupyterlab = ">=4.5.6,<5"
+jupytext = ">=1.19.1,<2"
+skore = "*"
+ipywidgets = "*"
+anywidget = "*"
+
+[tasks]
+mlflow-server = { cmd = "mlflow server --host 127.0.0.1 --port 5000" }
