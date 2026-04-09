@@ -1,0 +1,7 @@
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+
+# mlflow integration
+mlflow.db
+mlartifacts/
