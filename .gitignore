@@ -5,3 +5,9 @@
 # mlflow integration
 mlflow.db
 mlartifacts/
+
+# skore
+skore-artifacts/
+
+# notebooks
+.ipynb_checkpoints/
