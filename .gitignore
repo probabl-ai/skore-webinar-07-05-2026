@@ -2,9 +2,6 @@
 .pixi/*
 !.pixi/config.toml
 
-# mlflow integration
-mlflow.db
-mlartifacts/
 
 # skore
 skore-artifacts/
