@@ -1,20 +1,20 @@
 # %% [markdown]
-# ## Fetch the dataset
+# ## Fetch the Credit Card Default dataset
 # %%
 import skrub
-from fairlearn.datasets import fetch_acs_income
+from sklearn.datasets import fetch_openml
 
 df = (
-    fetch_acs_income(as_frame=True)
-    .frame.sample(10_000, random_state=42, axis="index")
+    fetch_openml(data_id=43435, as_frame=True)
+    .frame.sample(n=30_000, random_state=42)
     .reset_index(drop=True)
 )
 skrub.TableReport(df)
 # %% [markdown]
-# ## Create a binary classification task that proxies default risk
+# ## Prepare the features and target
 # %%
-X = df.drop(columns=["PINCP"])
-y = (df["PINCP"] >= 10_000).astype(int)
+X = df.drop(columns=["default.payment.next.month"])
+y = df["default.payment.next.month"].astype(int)
 
 # %% [markdown]
 # ## Evaluate a logistic regression model, detect problems with skore and use skrub for pre-processing
@@ -22,15 +22,11 @@ y = (df["PINCP"] >= 10_000).astype(int)
 import skore
 from sklearn.linear_model import LogisticRegression
 
-logistic_report = skore.evaluate(
-    LogisticRegression(random_state=0), X, y, splitter=0.2, pos_label=1
-)
+logistic_report = skore.evaluate(LogisticRegression(), X, y, splitter=0.2, pos_label=1)
 logistic_report.diagnose()
 
 # %%
-y.value_counts()
-# %%
-preprocessed_estimator = skrub.tabular_pipeline(LogisticRegression(random_state=0))
+preprocessed_estimator = skrub.tabular_pipeline(LogisticRegression())
 preprocessed_estimator
 
 # %%
@@ -42,8 +38,6 @@ preprocessed_logistic_report
 # %%
 preprocessed_logistic_report.diagnose()
 
-# %%
-skore.configuration.ignore_checks = ["SKD004"]
 
 # %% [markdown]
 # ## Define a custom check to flag models that do not respect a business requirement on fairness
@@ -65,11 +59,12 @@ class CheckFairness(Check):
 
     def __init__(self, sensitive_feature: str):
         self.sensitive_feature = sensitive_feature
+        self.code = f"{self.code}_{sensitive_feature}"
 
     def check_function(self, report):
         "Flag when the model is not fair between groups."
         if self.sensitive_feature not in report.X_test.columns:
-            return CheckNotApplicable(self)
+            raise CheckNotApplicable()
 
         rejection_rates = dict()
         for group in report.X_test[self.sensitive_feature].unique():
@@ -77,7 +72,7 @@ class CheckFairness(Check):
             group_predictions = report.get_predictions(data_source="test")[group_mask]
             group_actual = report.y_test[group_mask]
             rejection_rates[group] = selection_rate(
-                group_actual, group_predictions, pos_label=0
+                group_actual, group_predictions, pos_label=1
             )
 
         if (
@@ -95,7 +90,9 @@ class CheckFairness(Check):
 
 
 # %%
-preprocessed_logistic_report.add_checks([CheckFairness("SEX")])
+preprocessed_logistic_report.add_checks(
+    [CheckFairness("SEX"), CheckFairness("MARRIAGE")]
+)
 preprocessed_logistic_report.diagnose()
 
 # %% [markdown]
@@ -104,46 +101,71 @@ preprocessed_logistic_report.diagnose()
 from sklearn.metrics import confusion_matrix, make_scorer
 
 
-def fp_penalty_metric(y, y_pred, neg_label, pos_label):
+def credit_gain_metric(y, y_pred, neg_label, pos_label):
     cm = confusion_matrix(y, y_pred, labels=[neg_label, pos_label])
 
     gain_matrix = np.array(
         [
-            [2, -10],  # Hard penalty on false positives
-            [-1, 2],
+            [1, -1],  # TN: approved good borrower; FP: rejected good borrower
+            [-5, 0],  # FN: approved defaulter; TP: correctly rejected
         ]
     )
     return np.sum(cm * gain_matrix)
 
 
-fp_penalty_scorer = make_scorer(
-    fp_penalty_metric, neg_label=0, pos_label=1, response_method="predict"
+credit_gain_scorer = make_scorer(
+    credit_gain_metric, neg_label=0, pos_label=1, response_method="predict"
 )
 
-preprocessed_logistic_report.metrics.add(fp_penalty_scorer, name="FP penalty score")
+preprocessed_logistic_report.metrics.add(credit_gain_scorer)
 preprocessed_logistic_report
 
 # %% [markdown]
+# ## Use the business metric to compare models
+
+# %%
+from sklearn.ensemble import HistGradientBoostingClassifier
+
+hgbt_report = skore.evaluate(
+    skrub.tabular_pipeline(HistGradientBoostingClassifier(random_state=0)),
+    X,
+    y,
+    splitter=0.2,
+    pos_label=1,
+)
+hgbt_report.metrics.add(credit_gain_scorer)
+comparison_report = skore.compare([preprocessed_logistic_report, hgbt_report])
+comparison_report
+
+# %% [markdown]
+# ## Visualize the calibration of the model
+
+# %%
+from sklearn.calibration import CalibrationDisplay
+CalibrationDisplay.from_estimator(hgbt_report.estimator, hgbt_report.X_test, hgbt_report.y_test, strategy="quantile")
+
+# %% [markdown]
 # ## Tune the threshold to maximize the business-driven score
+
 # %%
 from sklearn.model_selection import TunedThresholdClassifierCV
 
-tuned_estimator = TunedThresholdClassifierCV(
-    estimator=preprocessed_logistic_report.estimator,
-    scoring=fp_penalty_scorer,
+tuned_threshold_estimator = TunedThresholdClassifierCV(
+    estimator=hgbt_report.estimator,
+    scoring=credit_gain_scorer,
     store_cv_results=True,
     random_state=0,
 )
 tuned_threshold_report = skore.evaluate(
-    tuned_estimator, X, y, splitter=0.2, pos_label=1
+    tuned_threshold_estimator, X, y, splitter=0.2, pos_label=1
 )
-tuned_threshold_report.metrics.add(fp_penalty_scorer, name="FP penalty score")
+tuned_threshold_report.metrics.add(credit_gain_scorer)
 print(
-    f"Best threshold for our custom score: {tuned_threshold_report.estimator.best_threshold_:0.2f}"
+    f"Best threshold for our business-driven score: {tuned_threshold_report.estimator.best_threshold_:0.2f}"
 )
 
 # %%
-comparison_report = skore.compare([preprocessed_logistic_report, tuned_threshold_report])
+comparison_report = skore.compare([hgbt_report, tuned_threshold_report])
 comparison_report
 # %%
 import matplotlib.pyplot as plt
@@ -160,12 +182,12 @@ axs.plot(
     "o",
     markersize=10,
     color="tab:orange",
-    label=f"Optimal cut-off point for the FP penalty score: {tuned_threshold_report.estimator.best_threshold_:0.2f}",
+    label=f"Optimal cut-off point for the credit gain score: {tuned_threshold_report.estimator.best_threshold_:0.2f}",
 )
 axs.legend()
 axs.set_xlabel("Decision threshold")
-axs.set_ylabel("FP penalty score")
-_ = fig.suptitle("FP penalty score as a function of the decision threshold")
+axs.set_ylabel("Credit gain score")
+_ = fig.suptitle("Credit gain score as a function of the decision threshold")
 
 # %% [markdown]
 # ## Visualize threshold selection interactively in the hub
