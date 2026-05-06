@@ -4,11 +4,7 @@
 import skrub
 from sklearn.datasets import fetch_openml
 
-df = (
-    fetch_openml(data_id=43435, as_frame=True)
-    .frame.sample(n=30_000, random_state=42)
-    .reset_index(drop=True)
-)
+df = fetch_openml(data_id=43435, as_frame=True).frame
 skrub.TableReport(df)
 # %% [markdown]
 # ## Prepare the features and target
@@ -142,7 +138,10 @@ comparison_report
 
 # %%
 from sklearn.calibration import CalibrationDisplay
-CalibrationDisplay.from_estimator(hgbt_report.estimator, hgbt_report.X_test, hgbt_report.y_test, strategy="quantile")
+
+CalibrationDisplay.from_estimator(
+    hgbt_report.estimator, hgbt_report.X_test, hgbt_report.y_test, strategy="quantile"
+)
 
 # %% [markdown]
 # ## Tune the threshold to maximize the business-driven score
