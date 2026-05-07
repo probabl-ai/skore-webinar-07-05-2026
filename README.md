@@ -4,7 +4,7 @@
 
 The recorded session is available at the following address:
 
-<fill address>
+<https://app.livestorm.co/p/a3c38d8a-42f4-40b5-8a44-ddf678399b68/live?s=52598bed-148b-4f38-aaf5-4f754d8ed814>
 
 ## Installation
 
