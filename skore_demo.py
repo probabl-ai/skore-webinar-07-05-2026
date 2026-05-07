@@ -151,14 +151,17 @@ CalibrationDisplay.from_estimator(
 # %%
 from sklearn.model_selection import TunedThresholdClassifierCV
 
-tuned_threshold_estimator = TunedThresholdClassifierCV(
-    estimator=hgbt_report.estimator,
-    scoring=credit_gain_scorer,
-    store_cv_results=True,
-    random_state=0,
-)
 tuned_threshold_report = skore.evaluate(
-    tuned_threshold_estimator, X, y, splitter=0.2, pos_label=1
+    TunedThresholdClassifierCV(
+        estimator=hgbt_report.estimator,
+        scoring=credit_gain_scorer,
+        store_cv_results=True,
+        random_state=0,
+    ),
+    X,
+    y,
+    splitter=0.2,
+    pos_label=1,
 )
 tuned_threshold_report.metrics.add(credit_gain_scorer)
 print(
@@ -193,7 +196,7 @@ _ = fig.suptitle("Credit gain score as a function of the decision threshold")
 # %% [markdown]
 # ## Visualize threshold selection interactively in the hub
 # %%
-tuned_threshold_report.metrics.roc()
+tuned_threshold_report.metrics.roc().plot()
 # %%
 skore.login(mode="hub")
 project_hub = skore.Project(name="20260507-demo-workspace/demo-project", mode="hub")
