@@ -19,7 +19,9 @@ import skore
 from sklearn.linear_model import LogisticRegression
 
 logistic_report = skore.evaluate(LogisticRegression(), X, y, splitter=0.2, pos_label=1)
-logistic_report.diagnose()
+logistic_report
+# %%
+logistic_report.checks.summarize()
 
 # %%
 preprocessed_estimator = skrub.tabular_pipeline(LogisticRegression())
@@ -32,7 +34,7 @@ preprocessed_logistic_report = skore.evaluate(
 preprocessed_logistic_report
 
 # %%
-preprocessed_logistic_report.diagnose()
+preprocessed_logistic_report.checks.summarize()
 
 
 # %% [markdown]
@@ -86,10 +88,10 @@ class CheckFairness(Check):
 
 
 # %%
-preprocessed_logistic_report.add_checks(
+preprocessed_logistic_report.checks.add(
     [CheckFairness("SEX"), CheckFairness("MARRIAGE")]
 )
-preprocessed_logistic_report.diagnose()
+preprocessed_logistic_report.checks.summarize()
 
 # %% [markdown]
 # ## Define a business metric taking into account the imbalanced costs of misclassification
@@ -190,7 +192,8 @@ _ = fig.suptitle("Credit gain score as a function of the decision threshold")
 
 # %% [markdown]
 # ## Visualize threshold selection interactively in the hub
-
+# %%
+tuned_threshold_report.metrics.roc()
 # %%
 skore.login(mode="hub")
 project_hub = skore.Project(name="20260507-demo-workspace/demo-project", mode="hub")
